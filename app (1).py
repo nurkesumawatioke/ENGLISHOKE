@@ -1,111 +1,113 @@
+import streamlit as st
 import google.generativeai as genai
-import os
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
 # ==============================================================================
-# PENGATURAN API KEY DAN MODEL (PENTING! UBAH SESUAI KEBUTUHAN ANDA)
+# KONFIGURASI APLIKASI STREAMLIT
 # ==============================================================================
 
-# GANTI INI DENGAN API KEY GEMINI ANDA!
-# Untuk penggunaan pribadi di Google Colab.
-# JANGAN BAGIKAN KODE INI DENGAN API KEY DI DALAMNYA KE PUBLIK.
-API_KEY = "AIzaSyDNOAWXo6vMGNu04Po4PIDEuoxeG5zrnPA" # <--- GANTI BAGIAN INI!
+st.set_page_config(
+    page_title="Gemini Chatbot Kuliner 🧑‍🍳",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-# Nama model Gemini yang akan digunakan.
-# Pilihan yang direkomendasikan untuk belajar dan kuota gratis:
-# - 'gemini-1.5-flash' (Sangat baik untuk teks, konteks besar, kuota cukup longgar)
-# - 'gemini-2.5-flash-lite' (Lebih baru, sangat cepat, kuota RPD sangat longgar)
-MODEL_NAME = 'gemini-1.5-flash'
+st.title("Gemini Chatbot Ahli Kuliner 🧑‍🍳")
 
 # ==============================================================================
-# KONTEKS AWAL CHATBOT (INI BAGIAN YANG BISA SISWA MODIFIKASI!)
+# PENGATURAN MODEL DAN API KEY DARI SIDEBAR
 # ==============================================================================
 
-# Definisikan peran chatbot Anda di sini.
-# Ini adalah "instruksi sistem" yang akan membuat chatbot berperilaku sesuai keinginan Anda.
-# Buatlah singkat, jelas, dan langsung pada intinya untuk menghemat token.
+# Definisikan model yang tersedia
+AVAILABLE_MODELS = {
+    'Gemini 1.5 Flash (Direkomendasikan)': 'gemini-1.5-flash',
+    'Gemini 2.5 Flash Lite': 'gemini-2.5-flash-lite',
+    'Gemini 1.0 Pro': 'gemini-1.0-pro'
+}
 
+with st.sidebar:
+    st.header("Konfigurasi API ⚙️")
 
-# --- CONTOH : CHATBOT AHLI KULINER  ---
-
-INITIAL_CHATBOT_CONTEXT = [
-    {
-        "role": "user",
-        "parts": ["Kamu adalah ahli Kuliner. berikan lokasi kuliner yang rekomended. Jawaban singkat dan jelas. Tolak pertanyaan selain lokasi kuliner."]
-    },
-    {
-        "role": "model",
-        "parts": ["Baik! Saya Berikan tempat kuliner yang direkomendasikan."]
-    }
-]
-
-# ==============================================================================
-# FUNGSI UTAMA CHATBOT (HINDARI MENGUBAH BAGIAN INI JIKA TIDAK YAKIN)
-# ==============================================================================
-
-# Cek apakah API Key sudah diganti
-if API_KEY ==  or not API_KEY:
-    print("Peringatan: API Key belum diatur. Harap ganti 'YOUR_GEMINI_API_KEY_HERE' dengan API Key Anda.")
-    print("Chatbot tidak akan berfungsi tanpa API Key yang valid.")
-    exit()
-
-try:
-    genai.configure(api_key=API_KEY)
-    print("Gemini API Key berhasil dikonfigurasi.")
-except Exception as e:
-    print(f"Kesalahan saat mengkonfigurasi API Key: {e}")
-    print("Pastikan API Key Anda benar dan koneksi internet stabil.")
-    exit()
-
-# Inisialisasi model
-try:
-    model = genai.GenerativeModel(
-        MODEL_NAME,
-        generation_config=genai.types.GenerationConfig(
-            temperature=0.4, # Kontrol kreativitas (0.0=faktual, 1.0=kreatif)
-            max_output_tokens=500 # Batas maksimal panjang jawaban dalam token
-        )
+    # Input API Key
+    st.caption("Masukkan Gemini API Key Anda. Tidak disimpan oleh aplikasi ini.")
+    # Anda bisa menggunakan st.secrets['GEMINI_API_KEY'] jika di-deploy di Streamlit Community Cloud
+    api_key_input = st.text_input(
+        "API Key",
+        type="password",
+        placeholder="AIzaSy...",
+        key="api_key_input"
     )
-    print(f"Model '{MODEL_NAME}' berhasil diinisialisasi.")
-except Exception as e:
-    print(f"Kesalahan saat inisialisasi model '{MODEL_NAME}': {e}")
-    print("Pastikan nama model benar dan tersedia untuk API Key Anda.")
-    exit()
 
-# --- Memulai Chat ---
-print("\n--- Chatbot Dimulai ---")
-# Pesan pembuka umum, model akan membalas sesuai konteks awal
-print(INITIAL_CHATBOT_CONTEXT[1]["parts"][0])
-print("Ketik 'exit' untuk keluar.")
-print("---")
+    # Pilihan Model
+    model_display_name = st.selectbox(
+        "Pilih Model Gemini",
+        list(AVAILABLE_MODELS.keys())
+    )
+    MODEL_NAME = AVAILABLE_MODELS[model_display_name]
 
-# Inisialisasi sesi chat dengan riwayat awal (konteks)
-chat = model.start_chat(history=INITIAL_CHATBOT_CONTEXT)
+    st.divider()
 
-while True:
-    user_input = input("Anda: ")
-    user_input_lower = user_input.lower() # Optimasi: Konversi ke huruf kecil
+    st.header("Sistem Prompt 💡")
+    # Definisikan peran chatbot (diadaptasi dari INITIAL_CHATBOT_CONTEXT Anda)
+    SYSTEM_INSTRUCTION = (
+        "Kamu adalah ahli Kuliner. Berikan lokasi kuliner yang direkomendasikan. "
+        "Jawaban harus singkat dan jelas. "
+        "Tolak pertanyaan yang tidak berhubungan dengan lokasi kuliner."
+    )
+    st.text_area(
+        "Instruksi Sistem (Peran Chatbot)",
+        SYSTEM_INSTRUCTION,
+        height=150,
+        key="system_instruction_area"
+    )
 
-    if user_input_lower == 'exit':
-        print("Chatbot: Sampai jumpa!")
-        break
+    st.divider()
+    st.write("Dibuat dengan Gemini API dan Streamlit.")
 
-    print("Chatbot: (Sedang membalas...)")
+
+# ==============================================================================
+# INISIALISASI GEMINI DAN SESI STATE
+# ==============================================================================
+
+# Riwayat chat disimpan di session state agar tidak hilang saat UI refresh
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+# Objek chat disimpan di session state
+if "chat_session" not in st.session_state:
+    st.session_state.chat_session = None
+
+def init_gemini(api_key, model_name, system_instruction):
+    """Mengkonfigurasi Gemini dan menginisialisasi sesi chat."""
+    if not api_key:
+        st.error("Masukkan Gemini API Key di sidebar untuk memulai.")
+        return False
 
     try:
-        # Kirim input pengguna langsung ke model.
-        # Model akan memprosesnya berdasarkan INITIAL_CHATBOT_CONTEXT yang telah disetel.
-        response = chat.send_message(user_input_lower, request_options={"timeout": 60})
+        # Konfigurasi API
+        genai.configure(api_key=api_key)
 
-        if response and response.text:
-            print(f"Chatbot: {response.text}")
-        else:
-            print("Chatbot: Maaf, saya tidak bisa memberikan balasan.")
-            print("Penyebab: Respons API kosong atau tidak valid.")
+        # Inisialisasi Model
+        model = genai.GenerativeModel(
+            model_name=model_name,
+            system_instruction=system_instruction,
+            generation_config=genai.types.GenerationConfig(
+                temperature=0.4,
+                max_output_tokens=500
+            ),
+            # Pengaturan keamanan agar lebih fleksibel (opsional)
+            safety_settings=[
+                genai.types.SafetySetting(
+                    category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                    threshold=HarmBlockThreshold.BLOCK_ONLY_HIGH
+                )
+            ]
+        )
 
-    except Exception as e:
-        print(f"Chatbot: Maaf, terjadi kesalahan saat berkomunikasi dengan Gemini:")
-        print(f"Error Detail: {e}")
-        print("Kemungkinan penyebab:")
-        print("  - Masalah koneksi internet atau timeout.")
-        print("  - API Key mungkin dibatasi, tidak valid, atau melebihi kuota.")
-        print("  - Masalah internal di server Gemini.")
+        # Inisialisasi sesi chat baru
+        st.session_state.chat_session = model.start_chat(history=[])
+        st.session_state.messages = [
+             {"role": "model", "content": "Halo! Saya siap merekomendasikan tempat kuliner terbaik. Tanyakan saja lokasi yang Anda cari!"}
+        ]
+
+        st.success(f
