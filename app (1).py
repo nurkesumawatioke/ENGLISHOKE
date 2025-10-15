@@ -110,4 +110,65 @@ def init_gemini(api_key, model_name, system_instruction):
              {"role": "model", "content": "Halo! Saya siap merekomendasikan tempat kuliner terbaik. Tanyakan saja lokasi yang Anda cari!"}
         ]
 
-        st.success(f
+        st.success(f"Model **{model_name}** berhasil dikonfigurasi. Silakan mulai chat.")
+        return True
+
+    except Exception as e:
+        st.error(f"Kesalahan saat menginisialisasi Gemini: {e}")
+        st.error("Pastikan API Key Anda benar dan kuota tersedia.")
+        return False
+
+# Tombol untuk inisialisasi/reset chat
+if st.sidebar.button("Mulai Chat / Reset Chat"):
+    init_gemini(api_key_input, MODEL_NAME, SYSTEM_INSTRUCTION)
+
+
+# ==============================================================================
+# LOGIKA UTAMA CHATBOT (STREAMLIT UI)
+# ==============================================================================
+
+# Tampilkan riwayat chat
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.write(message["content"])
+
+# Fungsi untuk mengirim pesan dan mendapatkan respons
+def send_message(prompt):
+    """Mengirim pesan ke model Gemini dan menambahkan ke riwayat."""
+    if not st.session_state.chat_session:
+        st.error("Chatbot belum diinisialisasi. Tekan 'Mulai Chat / Reset Chat' di sidebar.")
+        return
+
+    # Tambahkan pesan pengguna ke riwayat
+    st.session_state.messages.append({"role": "user", "content": prompt})
+
+    # Tampilkan pesan pengguna
+    with st.chat_message("user"):
+        st.write(prompt)
+
+    # Kirim pesan ke Gemini
+    try:
+        with st.chat_message("model"):
+            with st.spinner("Gemini sedang berpikir..."):
+                response = st.session_state.chat_session.send_message(
+                    prompt, 
+                    request_options={"timeout": 60}
+                )
+                
+                # Tampilkan dan simpan respons
+                model_response = response.text
+                st.write(model_response)
+                st.session_state.messages.append({"role": "model", "content": model_response})
+
+    except Exception as e:
+        error_message = f"Terjadi kesalahan: {e}. Coba lagi atau reset chat."
+        with st.chat_message("model"):
+            st.error(error_message)
+        st.session_state.messages.append({"role": "model", "content": error_message})
+
+
+# Input pengguna di bagian bawah
+user_input = st.chat_input("Tanyakan lokasi kuliner yang Anda cari...")
+
+if user_input:
+    send_message(user_input)
